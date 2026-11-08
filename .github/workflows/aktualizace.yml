@@ -1,0 +1,58 @@
+# Každou hodinu stáhne nové inzeráty a zveřejní mapu na GitHub Pages.
+name: Aktualizace mapy
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: aktualizace
+  cancel-in-progress: false
+
+jobs:
+  aktualizace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obnovit uložený stav
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: stav-${{ github.run_id }}
+          restore-keys: stav-
+
+      - name: Stáhnout novinky
+        env:
+          BUDGET_MIN: "25"
+        run: python3 run_once.py _site
+
+      - name: Uložit stav
+        if: always() && hashFiles('data/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: stav-${{ github.run_id }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

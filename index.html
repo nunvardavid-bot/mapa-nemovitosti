@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nemovitosti od majitelů</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --ink: #17202a;
+    --muted: #5f6b7a;
+    --line: #e3e7ec;
+    --chip: #f1f4f7;
+    --chip-on: #1f6feb;
+    --chip-on-ink: #ffffff;
+    --accent: #ff1744;
+    --shadow: 0 6px 24px rgba(15, 25, 40, .14);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  header { padding: 8px 12px 6px; border-bottom: 1px solid var(--line); background: var(--panel); z-index: 5;
+    box-shadow: 0 2px 10px rgba(15,25,40,.06); }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; margin-right: 6px; white-space: nowrap; }
+  .brand i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(255,23,68,.22); }
+  .group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .group > span { color: var(--muted); font-size: 12px; margin-right: 2px; }
+  .sep { width: 1px; height: 22px; background: var(--line); }
+  .chip { border: 1px solid transparent; background: var(--chip); color: var(--ink); border-radius: 999px;
+    padding: 4px 11px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; user-select: none; }
+  .chip:hover { border-color: #c9d2dc; }
+  .chip.on { background: var(--chip-on); color: var(--chip-on-ink); }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .chip.all { color: var(--muted); background: transparent; padding: 4px 6px; }
+  label.f { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  select, input[type=text] { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid #cfd6de;
+    border-radius: 8px; padding: 4px 8px; height: 30px; }
+  input[type=text] { width: 92px; }
+  select.hot { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,23,68,.12); font-weight: 600; }
+  label.chk { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+
+  main { flex: 1; display: flex; min-height: 0; position: relative; }
+  #mapwrap { flex: 1; min-width: 0; position: relative; }
+  #map { position: absolute; inset: 0; }
+  aside { width: 370px; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .side-h { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .side-h b { font-size: 16px; }
+  #rows { overflow-y: auto; flex: 1; }
+  .item { display: flex; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); text-decoration: none; color: inherit; }
+  .item:hover { background: #f5f8fc; }
+  .item img, .item .noimg { width: 92px; height: 69px; object-fit: cover; border-radius: 7px; flex: none; background: #eef1f4; }
+  .item .b { min-width: 0; flex: 1; }
+  .item .pr { font-weight: 700; font-size: 15px; }
+  .item .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .a { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .more { padding: 12px; color: var(--muted); font-size: 12px; text-align: center; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; color: #fff; }
+  .b-sreality { background: #d81b2c; } .b-bezrealitky { background: #00a54f; } .b-bazos { background: #2962ff; } .b-ulovdomov { background: #8e24aa; }
+  .warn { color: #b26a00; font-weight: 600; }
+  .agebox { display: inline-block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+
+  .ov { position: absolute; z-index: 3; background: rgba(255,255,255,.95); border-radius: var(--radius); box-shadow: var(--shadow); }
+  #base { top: 10px; right: 10px; display: flex; padding: 3px; gap: 2px; }
+  #base button { border: 0; background: transparent; font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 7px; cursor: pointer; color: var(--ink); }
+  #base button.on { background: var(--chip-on); color: #fff; }
+  #legend { left: 10px; bottom: 34px; padding: 8px 10px; font-size: 12px; max-width: 220px; }
+  #legend .li { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+  #legend .li i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+  #legend .lt { font-weight: 600; margin-bottom: 4px; }
+  #status { right: 10px; bottom: 30px; padding: 7px 10px; font-size: 12px; color: var(--muted); max-width: min(560px, calc(100% - 260px)); }
+  #status .live { color: #00a54f; font-weight: 700; }
+  #status .live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00c853; margin-right: 5px; animation: blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  #toast { left: 50%; top: 12px; transform: translateX(-50%); padding: 8px 14px; font-weight: 600; display: none; cursor: pointer; }
+  #toast b { color: var(--accent); }
+  #listbtn { display: none; }
+
+  .maplibregl-popup { z-index: 6; }
+  .maplibregl-popup-content { padding: 0; border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .pop { width: 270px; font-size: 13px; }
+  .pop img { width: 100%; height: 150px; object-fit: cover; display: block; background: #eef1f4; }
+  .pop .b { padding: 9px 11px 10px; }
+  .pop .pr { font-size: 18px; font-weight: 800; }
+  .pop .mt { font-size: 14px; font-weight: 600; margin: 1px 0 4px; }
+  .pop .t { color: var(--ink); }
+  .pop .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .pop .ft { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 7px; font-size: 12px; color: var(--muted); }
+  .pop .hint { margin-top: 7px; font-size: 11px; color: var(--muted); }
+  .pop a.go { display: block; margin-top: 8px; text-align: center; background: var(--chip-on); color: #fff; text-decoration: none; padding: 7px; border-radius: 8px; font-weight: 600; }
+  .multi { width: 300px; max-height: 340px; overflow-y: auto; }
+  .multi .h { padding: 9px 11px; font-weight: 700; border-bottom: 1px solid var(--line); }
+  .multi a { display: block; padding: 7px 11px; border-bottom: 1px solid var(--line); text-decoration: none; color: inherit; }
+  .multi a:hover { background: #f5f8fc; }
+  .multi .pr { font-weight: 700; }
+  .multi .s { font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    aside { position: absolute; right: 0; top: 0; bottom: 0; width: min(370px, 92vw); z-index: 4; box-shadow: var(--shadow); display: none; }
+    aside.open { display: flex; }
+    #listbtn { display: inline-block; }
+    #status { max-width: calc(100% - 20px); left: 10px; right: 10px; bottom: 8px; }
+    #legend { display: none; }
+    header { padding: 6px 10px 4px; }
+    .row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+    .row > * { flex: none; }
+    .group { flex-wrap: nowrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <div class="brand"><i></i>Nemovitosti od majitelů</div>
+    <div class="group" id="g-offer"></div>
+    <div class="sep"></div>
+    <div class="group" id="g-cat"><span>Typ</span></div>
+    <div class="sep"></div>
+    <div class="group" id="g-src"><span>Zdroj</span></div>
+    <button class="chip" id="listbtn">Seznam</button>
+  </div>
+  <div class="row">
+    <div class="group" id="g-disp"><span>Dispozice</span></div>
+    <div class="sep"></div>
+    <label class="f">Přidáno za posledních
+      <select id="age"></select>
+    </label>
+    <label class="f">Cena <input type="text" id="pmin" placeholder="od (např. 2m)" inputmode="numeric"> – <input type="text" id="pmax" placeholder="do" inputmode="numeric"></label>
+    <label class="f">Plocha od <input type="text" id="amin" placeholder="m²" inputmode="numeric" style="width:60px"></label>
+    <label class="f">Barva teček
+      <select id="color">
+        <option value="age">podle stáří</option>
+        <option value="ppm">podle ceny za m²</option>
+        <option value="src">podle zdroje</option>
+      </select>
+    </label>
+    <label class="f">Oblast <select id="region"></select></label>
+    <label class="chk" title="Inzeráty z Bazoše a UlovDomova, u kterých si nejsme jistí, že nejsou od realitky (v popupu označené ⚠)"><input type="checkbox" id="maybe"> i nejisté ⚠</label>
+  </div>
+</header>
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div class="ov" id="base">
+      <button data-b="osm" class="on">Barevná</button><button data-b="voyager">Světlá</button><button data-b="sat">Satelit</button>
+    </div>
+    <div class="ov" id="legend"></div>
+    <div class="ov" id="status">Načítám…</div>
+    <div class="ov" id="toast"></div>
+  </div>
+  <aside id="side">
+    <div class="side-h">
+      <div><b id="cnt">0</b> <span id="cntl">inzerátů ve výřezu mapy</span></div>
+      <select id="sort">
+        <option value="new">nejnovější</option>
+        <option value="cheap">nejlevnější</option>
+        <option value="ppm">nejlevnější za m²</option>
+      </select>
+    </div>
+    <div id="rows"></div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const CATS = [["byt", "Byty"], ["dum", "Domy"], ["pozemek", "Pozemky"], ["chata", "Chaty a chalupy"], ["komercni", "Komerční"], ["garaz", "Garáže"], ["ostatni", "Ostatní"]];
+const OFFERS = [["prodej", "Prodej"], ["pronajem", "Pronájem"]];
+const SRCS = [["sreality", "Sreality", "#d81b2c"], ["bezrealitky", "Bezrealitky", "#00a54f"], ["bazos", "Bazoš", "#2962ff"], ["ulovdomov", "UlovDomov", "#8e24aa"]];
+const SRC_NAME = Object.fromEntries(SRCS.map(s => [s[0], s[1]]));
+const SRC_COL = Object.fromEntries(SRCS.map(s => [s[0], s[2]]));
+const DISPS = [["1+kk"], ["1+1"], ["2+kk"], ["2+1"], ["3+kk"], ["3+1"], ["4+kk"], ["4+1"], ["5+", "5 a více"], ["atyp", "Atyp."], ["?", "Neuvedeno"]];
+const AGES = [[1, "1 hodinu"], [3, "3 hodiny"], [10, "10 hodin"], [24, "24 hodin"], [72, "3 dny"], [168, "7 dní"], [336, "14 dní"], [720, "30 dní"], [0, "kdykoliv"]];
+const AGE_COLS = [[1, "#ff1744", "do 1 hodiny"], [3, "#ff6d00", "do 3 hodin"], [10, "#ffc400", "do 10 hodin"], [24, "#aeea00", "do 24 hodin"],
+  [72, "#00c853", "do 3 dnů"], [168, "#00b8d4", "do týdne"], [720, "#2962ff", "do měsíce"], [Infinity, "#aa00ff", "starší"]];
+const PPM_SALE = [[40000, "#00c853"], [60000, "#64dd17"], [80000, "#ffd600"], [100000, "#ff9100"], [130000, "#ff3d00"], [Infinity, "#c51162"]];
+const PPM_RENT = [[150, "#00c853"], [200, "#64dd17"], [250, "#ffd600"], [300, "#ff9100"], [400, "#ff3d00"], [Infinity, "#c51162"]];
+const GREY = "#9aa3ad";
+const REGIONS = [
+  ["Celá ČR", [12.09, 48.55, 18.86, 51.06]], ["Praha", [14.22, 49.94, 14.71, 50.18]], ["Brno a okolí", [16.38, 49.08, 16.84, 49.32]],
+  ["Ostrava", [18.1, 49.73, 18.4, 49.92]], ["Plzeň", [13.27, 49.68, 13.48, 49.8]], ["Olomouc", [17.18, 49.55, 17.33, 49.64]],
+  ["Liberec", [14.98, 50.72, 15.13, 50.81]], ["České Budějovice", [14.4, 48.93, 14.54, 49.02]], ["Hradec Králové", [15.76, 50.17, 15.9, 50.25]],
+  ["Pardubice", [15.7, 49.99, 15.85, 50.07]], ["Zlín", [17.6, 49.19, 17.73, 49.25]],
+  ["— Středočeský kraj", [13.4, 49.53, 15.53, 50.63]], ["— Jihočeský kraj", [13.5, 48.55, 15.6, 49.62]], ["— Plzeňský kraj", [12.4, 49.05, 13.95, 50.1]],
+  ["— Karlovarský kraj", [12.09, 49.9, 13.3, 50.47]], ["— Ústecký kraj", [12.95, 50.13, 14.85, 51.06]], ["— Liberecký kraj", [14.45, 50.48, 15.45, 51.03]],
+  ["— Královéhradecký kraj", [15.2, 49.95, 16.6, 50.8]], ["— Pardubický kraj", [15.35, 49.55, 16.85, 50.2]], ["— Vysočina", [14.85, 49.0, 16.45, 49.85]],
+  ["— Jihomoravský kraj", [15.55, 48.6, 17.65, 49.65]], ["— Olomoucký kraj", [16.65, 49.3, 17.7, 50.45]], ["— Zlínský kraj", [17.1, 48.85, 18.45, 49.5]],
+  ["— Moravskoslezský kraj", [17.15, 49.4, 18.9, 50.3]],
+];
+const IS_TOUCH = matchMedia("(hover: none)").matches;
+const nf = new Intl.NumberFormat("cs-CZ");
+const $ = id => document.getElementById(id);
+
+// ───── stav filtrů (pamatuje se v prohlížeči) ─────
+const F = { offer: new Set(["prodej"]), cat: new Set(), src: new Set(), disp: new Set(), age: 0, pmin: null, pmax: null, amin: null, color: "age", maybe: true, base: "osm", sort: "new" };
+const SAVE_KEY = "mapa-nemovitosti-v2";
+let savedView = null;
+try {
+  const s = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+  if (s) {
+    for (const k of ["offer", "cat", "src", "disp"]) if (Array.isArray(s.F[k])) F[k] = new Set(s.F[k]);
+    for (const k of ["age", "pmin", "pmax", "amin", "color", "maybe", "base", "sort"]) if (k in s.F) F[k] = s.F[k];
+    savedView = s.view;
+  }
+} catch (e) {}
+function persist() {
+  try {
+    const out = { ...F }; for (const k of ["offer", "cat", "src", "disp"]) out[k] = [...F[k]];
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ F: out, view: map ? { c: map.getCenter().toArray(), z: map.getZoom() } : null }));
+  } catch (e) {}
+}
+
+// ───── ovládací prvky ─────
+function chipGroup(el, key, opts, withAll) {
+  const render = () => {
+    el.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.v ? F[key].has(c.dataset.v) : F[key].size === 0));
+  };
+  if (withAll) {
+    const a = document.createElement("button"); a.className = "chip all"; a.textContent = "vše";
+    a.onclick = () => { F[key].clear(); render(); changed(); }; el.appendChild(a);
+  }
+  for (const [v, label, col] of opts) {
+    const b = document.createElement("button"); b.className = "chip"; b.dataset.v = v;
+    b.innerHTML = (col ? `<span class="dot" style="background:${col}"></span>` : "") + esc(label || v);
+    b.onclick = () => { F[key].has(v) ? F[key].delete(v) : F[key].add(v); render(); changed(); };
+    el.appendChild(b);
+  }
+  render();
+}
+chipGroup($("g-offer"), "offer", OFFERS, false);
+chipGroup($("g-cat"), "cat", CATS, true);
+chipGroup($("g-src"), "src", SRCS, true);
+chipGroup($("g-disp"), "disp", DISPS, true);
+
+for (const [h, label] of AGES) $("age").add(new Option(label, h));
+$("age").value = F.age;
+REGIONS.forEach(([n], i) => $("region").add(new Option(n, i)));
+$("color").value = F.color; $("maybe").checked = F.maybe; $("sort").value = F.sort;
+const fmtIn = v => v == null ? "" : nf.format(v);
+$("pmin").value = fmtIn(F.pmin); $("pmax").value = fmtIn(F.pmax); $("amin").value = fmtIn(F.amin);
+
+function parseMoney(s) {
+  s = (s || "").toLowerCase().replace(/\s/g, "").replace(",", ".");
+  if (!s) return null;
+  let mul = 1;
+  if (/(m|mil)/.test(s)) mul = 1e6; else if (/(k|tis)/.test(s)) mul = 1e3;
+  const n = parseFloat(s.replace(/[^\d.]/g, ""));
+  return isFinite(n) ? Math.round(n * mul) : null;
+}
+$("age").onchange = e => { F.age = +e.target.value; changed(); };
+$("color").onchange = e => { F.color = e.target.value; changed(); };
+$("maybe").onchange = e => { F.maybe = e.target.checked; changed(); };
+$("sort").onchange = e => { F.sort = e.target.value; persist(); renderList(); };
+for (const id of ["pmin", "pmax", "amin"]) {
+  $(id).addEventListener("change", e => { F[id] = parseMoney(e.target.value); e.target.value = fmtIn(F[id]); changed(); });
+}
+$("region").onchange = e => { const b = REGIONS[+e.target.value][1]; map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 20 }); };
+$("listbtn").onclick = () => $("side").classList.toggle("open");
+
+// ───── formátování ─────
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function safeUrl(u) { return /^https:\/\//.test(u || "") ? u : "#"; }
+function priceText(it) {
+  if (!it.p) return "Cena na dotaz";
+  return nf.format(Math.round(it.p)) + " " + (it.cur || "Kč") + (it.o === "pronajem" ? "/měs." : "");
+}
+function sizeText(it) {
+  const parts = [];
+  if (it.a) parts.push(nf.format(it.a) + " m²");
+  if (it.l) parts.push((it.a ? "pozemek " : "") + nf.format(it.l) + " m²");
+  return parts.join(", ");
+}
+function ppmText(it) { return it.m ? nf.format(Math.round(it.m)) + " Kč/m²" + (it.o === "pronajem" ? "/měs." : "") : ""; }
+function dayLabel(ms) {
+  const d = new Date(ms), t = new Date(); t.setHours(0, 0, 0, 0);
+  const diff = Math.round((t - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  if (diff === 0) return "dnes"; if (diff === 1) return "včera";
+  return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`;
+}
+function hm(ms) { const d = new Date(ms); return d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function ageText(it, now) {
+  if (!it.ad) return "datum se zjišťuje…";
+  if (it.pr === "day") return "vloženo " + dayLabel(it.ad);
+  const diff = Math.max(0, now - it.ad), ap = it.pr === "approx" ? "≈ " : "";
+  const when = it.pr === "live" ? ` (${dayLabel(it.ad)} ${hm(it.ad)})` : "";
+  if (diff < 36e5) return `${ap}před ${Math.max(1, Math.round(diff / 6e4))} min${when}`;
+  if (diff < 48 * 36e5) return `${ap}před ${Math.floor(diff / 36e5)} h ${Math.round((diff % 36e5) / 6e4)} min${when}`;
+  return ap + "vloženo " + dayLabel(it.ad);
+}
+function colorOf(it, now) {
+  if (F.color === "src") return SRC_COL[it.s] || GREY;
+  if (F.color === "ppm") {
+    if (!it.m) return GREY;
+    for (const [lim, c] of (it.o === "pronajem" ? PPM_RENT : PPM_SALE)) if (it.m < lim) return c;
+  }
+  if (!it.ad) return GREY;
+  const h = (now - it.ad) / 36e5;
+  for (const [lim, c] of AGE_COLS) if (h <= lim) return c;
+  return GREY;
+}
+
+// ───── data ze serveru ─────
+const items = new Map();
+let epoch = "", seq = 0, firstLoad = true, newSinceOpen = [];
+async function load() {
+  try {
+    const r = await fetch(`/api/listings?epoch=${epoch}&after=${seq}`);
+    const j = await r.json();
+    if (j.full) items.clear();
+    const fresh = [];
+    for (const it of j.items) { if (!items.has(it.k) && !firstLoad && !j.full) fresh.push(it.k); items.set(it.k, it); }
+    for (const k of j.removed) items.delete(k);
+    epoch = j.epoch; seq = j.seq;
+    if (j.full || j.items.length || j.removed.length) refresh();
+    const now = Date.now();
+    const visibleFresh = fresh.map(k => items.get(k)).filter(it => it && pass(it, now) && it.ad && now - it.ad < 6 * 36e5);
+    if (visibleFresh.length) { newSinceOpen.push(...visibleFresh.map(i => i.k)); showToast(); }
+    firstLoad = false;
+    lastLoad = now;
+  } catch (e) { $("status").textContent = "Server neběží – spusť server.py"; }
+}
+let lastLoad = 0;
+function showToast() {
+  const t = $("toast"), n = newSinceOpen.length;
+  t.innerHTML = `<b>+${n}</b> ${n === 1 ? "nový inzerát" : n < 5 ? "nové inzeráty" : "nových inzerátů"} – klikni pro zobrazení`;
+  t.style.display = "block";
+  t.onclick = () => {
+    const pts = newSinceOpen.map(k => items.get(k)).filter(Boolean);
+    if (pts.length) {
+      const b = new maplibregl.LngLatBounds(); pts.forEach(p => b.extend([p.lo, p.la]));
+      map.fitBounds(b, { padding: 80, maxZoom: 14 });
+    }
+    newSinceOpen = []; t.style.display = "none";
+  };
+}
+
+function pass(it, now) {
+  if (F.offer.size && !F.offer.has(it.o)) return false;
+  if (F.cat.size && !F.cat.has(it.c)) return false;
+  if (F.src.size && !F.src.has(it.s)) return false;
+  if (F.disp.size && !F.disp.has(it.d || "?")) return false;
+  if (!F.maybe && it.own === "maybe") return false;
+  if (F.age && (!it.ad || now - it.ad > F.age * 36e5)) return false;
+  if (F.pmin && !(it.p >= F.pmin)) return false;
+  if (F.pmax && !(it.p <= F.pmax)) return false;
+  if (F.amin && !((it.a || it.l) >= F.amin)) return false;
+  return true;
+}
+
+let filtered = [];
+function refresh() {
+  if (!map || !map.getSource("pts")) return;
+  const now = Date.now();
+  filtered = [];
+  for (const it of items.values()) if (pass(it, now)) filtered.push(it);
+  filtered.sort((a, b) => (a.ad || 0) - (b.ad || 0));   // nejnovější se kreslí navrch
+  const feats = filtered.map(it => ({
+    type: "Feature", geometry: { type: "Point", coordinates: [it.lo, it.la] },
+    properties: { k: it.k, c: colorOf(it, now), f: it.ad && now - it.ad < 36e5 ? 1 : 0 },
+  }));
+  map.getSource("pts").setData({ type: "FeatureCollection", features: feats });
+  $("age").classList.toggle("hot", F.age > 0 && F.age <= 10);
+  renderLegend(); renderList(); renderStatus();
+}
+let tm = null;
+function changed() { persist(); clearTimeout(tm); tm = setTimeout(refresh, 60); }
+
+// ───── mapa ─────
+const style = {
+  version: 8,
+  sources: {
+    osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>' },
+    voyager: { type: "raster", tiles: ["a", "b", "c"].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png`),
+      tileSize: 256, maxzoom: 20, attribution: '© OpenStreetMap © <a href="https://carto.com/attributions" target="_blank">CARTO</a>' },
+    sat: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tileSize: 256, maxzoom: 19, attribution: "Snímky © Esri" },
+  },
+  layers: [
+    { id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": 0.25, "raster-contrast": 0.05 } },
+    { id: "voyager", type: "raster", source: "voyager", layout: { visibility: "none" } },
+    { id: "sat", type: "raster", source: "sat", layout: { visibility: "none" } },
+  ],
+};
+const map = new maplibregl.Map({
+  container: "map", style,
+  center: savedView ? savedView.c : [15.45, 49.8], zoom: savedView ? savedView.z : 6.7,
+  attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false,
+});
+map.touchZoomRotate.disableRotation();
+new ResizeObserver(() => map.resize()).observe($("mapwrap"));
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: false } }), "top-left");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+
+function setBase(b) {
+  F.base = b;
+  for (const id of ["osm", "voyager", "sat"]) map.setLayoutProperty(id, "visibility", id === b ? "visible" : "none");
+  document.querySelectorAll("#base button").forEach(x => x.classList.toggle("on", x.dataset.b === b));
+  persist();
+}
+document.querySelectorAll("#base button").forEach(x => x.onclick = () => setBase(x.dataset.b));
+
+const HOVER = ["boolean", ["feature-state", "hover"], false];
+map.on("load", () => {
+  setBase(F.base);
+  map.addSource("pts", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "k" });
+  map.addLayer({ id: "halo", type: "circle", source: "pts", paint: {
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 3.8, 9, 6.5, 13, 9.5, 17, 13],
+    "circle-color": "#000", "circle-opacity": 0.3, "circle-blur": 0.5 } });
+  map.addLayer({ id: "pulse", type: "circle", source: "pts", filter: ["==", ["get", "f"], 1], paint: {
+    "circle-radius": 8, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": "#ff1744", "circle-stroke-width": 2.5, "circle-stroke-opacity": 0.8 } });
+  map.addLayer({ id: "dots", type: "circle", source: "pts", paint: {
+    "circle-radius": ["interpolate", ["linear"], ["zoom"],
+      5, ["case", HOVER, 6, 2.8], 9, ["case", HOVER, 9, 4.8], 13, ["case", HOVER, 12, 7.5], 17, ["case", HOVER, 15, 10.5]],
+    "circle-color": ["get", "c"],
+    "circle-stroke-color": ["case", HOVER, "#111", "#fff"],
+    "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 5, 0.7, 9, 1.5, 13, 2.2] } });
+  animatePulse();
+  refresh();
+  load();
+});
+map.on("moveend", () => { persist(); renderList(); });
+
+function animatePulse() {
+  let last = 0;
+  const step = ts => {
+    if (ts - last > 50 && map.getLayer("pulse")) {
+      last = ts;
+      const t = (ts % 1700) / 1700, z = map.getZoom();
+      const base = z < 9 ? 4 : z < 13 ? 7 : 10;
+      map.setPaintProperty("pulse", "circle-radius", base + t * 16);
+      map.setPaintProperty("pulse", "circle-stroke-opacity", 0.9 * (1 - t));
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ───── najetí, kliknutí ─────
+let hoverK = null, pinned = false;
+function setHover(k) {
+  if (hoverK && map.getSource("pts")) map.setFeatureState({ source: "pts", id: hoverK }, { hover: false });
+  hoverK = k;
+  if (k) map.setFeatureState({ source: "pts", id: k }, { hover: true });
+}
+function uniqItems(feats) {
+  const seen = new Set(), out = [];
+  for (const f of feats) { const k = f.properties.k; if (!seen.has(k) && items.has(k)) { seen.add(k); out.push(items.get(k)); } }
+  return out.sort((a, b) => (b.ad || 0) - (a.ad || 0));
+}
+function popupHtml(list, touch) {
+  const now = Date.now();
+  if (list.length === 1) {
+    const it = list[0];
+    const meta = [sizeText(it), ppmText(it)].filter(Boolean).join(" · ");
+    return `<div class="pop">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}
+      <div class="b"><div class="pr">${esc(priceText(it))}</div>
+      ${meta ? `<div class="mt">${esc(meta)}</div>` : ""}
+      <div class="t">${esc(it.t)}</div><div class="l">${esc(it.loc)}${it.ap ? " (poloha přibližná)" : ""}</div>
+      <div class="ft"><span class="badge b-${it.s}">${SRC_NAME[it.s]}</span><span class="agebox" style="background:${colorOf({ ...it }, now)}"></span>${esc(ageText(it, now))}
+      ${it.own === "maybe" ? '<span class="warn">⚠ možná realitka</span>' : ""}</div>
+      ${touch ? `<a class="go" href="${esc(safeUrl(it.u))}" target="_blank" rel="noopener">Otevřít inzerát ›</a>` : '<div class="hint">Klikni na tečku a otevře se inzerát</div>'}
+      </div></div>`;
+  }
+  const rows = list.slice(0, 15).map(it => `<a href="${esc(safeUrl(it.u))}" target="_blank" rel="noopener">
+      <div class="pr">${esc(priceText(it))} <span class="badge b-${it.s}">${SRC_NAME[it.s]}</span></div>
+      <div class="s">${esc([it.d, sizeText(it), ppmText(it)].filter(Boolean).join(" · "))}</div>
+      <div class="s">${esc(ageText(it, now))}</div></a>`).join("");
+  return `<div class="multi"><div class="h">${list.length} inzerátů na tomto místě</div>${rows}
+    ${list.length > 15 ? `<div class="more">… a další, přibliž mapu</div>` : ""}</div>`;
+}
+function showPopup(list, pin) {
+  const it = list[0];
+  closePopup();
+  pinned = pin;
+  const p =new maplibregl.Popup({ closeButton: pin, closeOnClick: pin, offset: 12, maxWidth: "320px" })
+    .setLngLat([it.lo, it.la]).setHTML(popupHtml(list, IS_TOUCH)).addTo(map);
+  p.on("close", () => { if (current === p) { pinned = false; current = null; } });
+  current = p;
+}
+let current = null;
+function closePopup() { if (current) { const c = current; current = null; c.remove(); } pinned = false; }
+
+map.on("mousemove", "dots", e => {
+  if (IS_TOUCH) return;
+  map.getCanvas().style.cursor = "pointer";
+  const list = uniqItems(e.features);
+  if (!list.length) return;
+  const k = list[0].k;
+  if (k !== hoverK) { setHover(k); if (!pinned) showPopup(list, false); }
+});
+map.on("mouseleave", "dots", () => {
+  map.getCanvas().style.cursor = "";
+  setHover(null);
+  if (!pinned) closePopup();
+});
+map.on("click", "dots", e => {
+  const list = uniqItems(map.queryRenderedFeatures(e.point, { layers: ["dots"] }));
+  if (!list.length) return;
+  if (IS_TOUCH) { showPopup(list, true); return; }
+  if (list.length === 1) window.open(safeUrl(list[0].u), "_blank", "noopener");
+  else showPopup(list, true);
+});
+
+// ───── seznam vpravo ─────
+function renderList() {
+  if (!map.getSource("pts")) return;
+  const b = map.getBounds(), now = Date.now();
+  let vis = filtered.filter(it => b.contains([it.lo, it.la]));
+  $("cnt").textContent = nf.format(vis.length);
+  $("listbtn").textContent = `Seznam (${nf.format(vis.length)})`;
+  if (F.sort === "new") vis.sort((a, b) => (b.ad || 0) - (a.ad || 0));
+  else if (F.sort === "cheap") vis.sort((a, b) => (a.p || Infinity) - (b.p || Infinity));
+  else vis.sort((a, b) => (a.m || Infinity) - (b.m || Infinity));
+  const shown = vis.slice(0, 200);
+  $("rows").innerHTML = shown.map(it => `<a class="item" href="${esc(safeUrl(it.u))}" target="_blank" rel="noopener" data-k="${esc(it.k)}">
+    ${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="noimg"></div>'}
+    <div class="b"><div class="pr">${esc(priceText(it))}</div>
+    <div class="t">${esc(it.t)}</div>
+    <div class="s">${esc([sizeText(it), ppmText(it)].filter(Boolean).join(" · "))}</div>
+    <div class="s">${esc(it.loc)}</div>
+    <div class="a"><span class="badge b-${it.s}">${SRC_NAME[it.s]}</span><span class="agebox" style="background:${colorOf(it, now)}"></span>${esc(ageText(it, now))}${it.own === "maybe" ? ' <span class="warn">⚠</span>' : ""}</div>
+    </div></a>`).join("") + (vis.length > shown.length ? `<div class="more">Zobrazeno prvních 200 – přibliž mapu pro další</div>` : "")
+    + (!vis.length ? `<div class="more">V tomto výřezu nic neodpovídá filtrům.<br>Zkus delší dobu „Přidáno za posledních“ nebo oddal mapu.</div>` : "");
+}
+$("rows").addEventListener("mouseover", e => { const a = e.target.closest(".item"); if (a) setHover(a.dataset.k); });
+$("rows").addEventListener("mouseleave", () => setHover(null));
+
+function renderLegend() {
+  let html = "";
+  if (F.color === "age") html = `<div class="lt">Přidáno</div>` + AGE_COLS.map(([, c, l]) => `<div class="li"><i style="background:${c}"></i>${l}</div>`).join("");
+  else if (F.color === "src") html = `<div class="lt">Zdroj</div>` + SRCS.map(([, l, c]) => `<div class="li"><i style="background:${c}"></i>${l}</div>`).join("");
+  else {
+    const rent = F.offer.size === 1 && F.offer.has("pronajem"), sc = rent ? PPM_RENT : PPM_SALE;
+    let prev = 0;
+    html = `<div class="lt">Cena za m²${rent ? " (měsíčně)" : ""}</div>` + sc.map(([lim, c]) => {
+      const l = lim === Infinity ? `nad ${nf.format(prev)} Kč` : `${nf.format(prev)} – ${nf.format(lim)} Kč`; prev = lim;
+      return `<div class="li"><i style="background:${c}"></i>${l}</div>`;
+    }).join("") + `<div class="li"><i style="background:${GREY}"></i>neznámá</div>`;
+  }
+  $("legend").innerHTML = html;
+}
+
+// ───── stav serveru ─────
+let srvStatus = null;
+async function loadStatus() {
+  try { srvStatus = await (await fetch("/api/status")).json(); } catch (e) { srvStatus = null; }
+  renderStatus();
+}
+function renderStatus() {
+  const el = $("status");
+  if (!srvStatus) { el.innerHTML = lastLoad ? "Server neodpovídá – běží server.py?" : "Načítám…"; return; }
+  let first = false;
+  const parts = SRCS.map(([k, name]) => {
+    const s = srvStatus.sources[k] || {};
+    let t = `${name} <b>${nf.format(s.count || 0)}</b>`;
+    if (!s.complete) {
+      first = true;
+      const of = s.expected ? `prošlo ${nf.format(s.stored || 0)} z ${nf.format(s.expected)}` : `hotovo ${Math.round((s.progress || 0) * 100)} %`;
+      t += ` <span title="${esc(s.phase || "")}">(${of})</span>`;
+    } else if (s.progress != null && s.phase) t += ` <span title="${esc(s.phase)}">(kontrola ${Math.round(s.progress * 100)} %)</span>`;
+    if (s.error) t += ` <span class="warn" title="${esc(s.error)}">⚠</span>`;
+    return t;
+  });
+  if (first) parts.unshift(`<span class="warn">První stažení celé ČR ještě běží, inzeráty průběžně přibývají.</span><br>`);
+  const extra = [];
+  const sr = srvStatus.sources.sreality || {}, bz = srvStatus.sources.bazos || {}, ud = srvStatus.sources.ulovdomov || {};
+  if (sr.dates_pending) extra.push(`data vložení: zbývá ${nf.format(sr.dates_pending)}`);
+  if (bz.geo_pending) extra.push(`poloha PSČ: zbývá ${nf.format(bz.geo_pending)}`);
+  if (ud.owner_pending) extra.push(`ověření majitele (UlovDomov): zbývá ${nf.format(ud.owner_pending)}`);
+  const ago = lastLoad ? Math.round((Date.now() - lastLoad) / 1000) : null;
+  const head = parts[0] && parts[0].startsWith("<span class=\"warn\"") ? parts.shift() : "";
+  el.innerHTML = head + `<span class="live">živě</span> · po filtrech <b>${nf.format(filtered.length)}</b> · ${parts.join(" · ")}`
+    + (extra.length ? `<br>${extra.join(" · ")}` : "") + (ago != null ? ` · obnoveno před ${ago} s` : "");
+}
+
+setInterval(load, 30000);
+setInterval(loadStatus, 10000);
+setInterval(() => { refresh(); }, 60000);   // přepočítá stáří a filtr času
+setInterval(renderStatus, 5000);
+loadStatus();
+</script>
+</body>
+</html>

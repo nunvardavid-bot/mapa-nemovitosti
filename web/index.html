@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="description" content="Mapa nemovitostí v celé ČR přímo od majitelů – Sreality, Bezrealitky, Bazoš, UlovDomov.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<title>Nemovitosti od majitelů</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: one-screen app – filtry nahoře, mapa vlevo, seznam vpravo (na mobilu vysouvací) */
+  :root {
+    --bg: #f3f5f1;
+    --panel: #ffffff;
+    --ink: #1a2420;
+    --muted: #5b6862;
+    --line: #dde3de;
+    --chip: #eaeee9;
+    --chip-on: #1a2420;
+    --chip-on-ink: #ffffff;
+    --accent: #e23b3f;
+    --warn: #a35f00;
+    --sea: #dce6ea;
+    --kraj-s: 62%;
+    --kraj-l: 84%;
+    --kraj-line: #ffffff;
+    --dot-line: #ffffff;
+    --city: #23302b;
+    --city-halo: rgba(255, 255, 255, .92);
+    --shadow: 0 8px 28px rgba(20, 35, 28, .16);
+    --font-display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+    --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101513; --panel: #171e1b; --ink: #e6ede9; --muted: #98a7a0; --line: #28322e; --chip: #222b27;
+      --chip-on: #e6ede9; --chip-on-ink: #101513; --accent: #ff5a5e; --warn: #f0a640; --sea: #0d1418;
+      --kraj-s: 22%; --kraj-l: 21%; --kraj-line: #0f1513; --dot-line: #0f1513; --city: #e6ede9;
+      --city-halo: rgba(10, 16, 14, .9); --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101513; --panel: #171e1b; --ink: #e6ede9; --muted: #98a7a0; --line: #28322e; --chip: #222b27;
+    --chip-on: #e6ede9; --chip-on-ink: #101513; --accent: #ff5a5e; --warn: #f0a640; --sea: #0d1418;
+    --kraj-s: 22%; --kraj-l: 21%; --kraj-line: #0f1513; --dot-line: #0f1513; --city: #e6ede9;
+    --city-halo: rgba(10, 16, 14, .9); --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.4 var(--font-body); display: flex; flex-direction: column; overflow: hidden; }
+  * { box-sizing: border-box; }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding-block: 8px 6px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-direction: column; gap: 6px; z-index: 5; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 10px; margin-right: 4px; }
+  .brand h1 { font: 700 19px/1 var(--font-display); margin: 0; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .brand h1 i { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .brand small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .group > span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+  .sep { width: 1px; height: 20px; background: var(--line); }
+  .chip { border: 0; background: var(--chip); border-radius: 999px; padding: 4px 11px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .chip:hover { background: color-mix(in srgb, var(--chip) 80%, var(--ink)); }
+  .chip.on { background: var(--chip-on); color: var(--chip-on-ink); }
+  .chip.all { background: transparent; color: var(--muted); padding: 4px 6px; }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  label.f { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  select, input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; height: 30px; font-size: 13px; color: var(--ink); }
+  input[type=text] { width: 96px; }
+  select.hot { border-color: var(--accent); font-weight: 600; }
+  label.chk { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; }
+  #listbtn { display: none; }
+
+  main { flex: 1; min-height: 0; display: flex; position: relative; }
+  #mapwrap { flex: 1; min-width: 0; position: relative; }
+  #map { position: absolute; inset: 0; background: var(--sea); }
+  aside { width: 360px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .side-h { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .side-h b { font: 700 17px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  #rows { overflow-y: auto; flex: 1; min-height: 0; }
+  .item { display: block; padding: 10px 14px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
+  .item:hover { background: color-mix(in srgb, var(--panel) 92%, var(--ink)); }
+  .item .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .item .pr { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .item .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .a { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 3px; flex-wrap: wrap; }
+  .more { padding: 14px; color: var(--muted); font-size: 12px; text-align: center; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; color: #fff; }
+  .b-0 { background: #d81b2c; } .b-1 { background: #00a54f; } .b-2 { background: #2962ff; } .b-3 { background: #8e24aa; }
+  .agebox { display: inline-block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+  .warn { color: var(--warn); font-weight: 600; }
+  .item.has-img { display: flex; gap: 10px; }
+  .item img { width: 88px; height: 66px; object-fit: cover; border-radius: 7px; flex: none; background: var(--chip); }
+  .item .b { min-width: 0; flex: 1; }
+  .pop img { display: block; width: calc(100% + 26px); max-width: none; height: 150px; object-fit: cover; margin: -11px -13px 6px; background: var(--chip); }
+  #base { top: 10px; right: max(10px, env(safe-area-inset-right, 0px)); display: flex; padding: 3px; gap: 2px; }
+  #base button { border: 0; background: transparent; font-size: 12px; padding: 5px 9px; border-radius: 7px; cursor: pointer; }
+  #base button.on { background: var(--chip-on); color: var(--chip-on-ink); }
+  .base-tiles .city { display: none; }
+
+  .ov { position: absolute; z-index: 3; background: color-mix(in srgb, var(--panel) 94%, transparent); border-radius: 10px; box-shadow: var(--shadow); }
+  #legend { left: max(10px, env(safe-area-inset-left, 0px)); bottom: 30px; padding: 8px 10px; font-size: 12px; }
+  #legend .lt { font-weight: 600; margin-bottom: 4px; }
+  #legend .li { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+  #legend .li i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--dot-line); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent); }
+  #status { right: 10px; bottom: 30px; padding: 7px 11px; font-size: 12px; color: var(--muted); max-width: min(460px, calc(100% - 210px)); }
+  #status b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #loading { inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 70%, transparent); border-radius: 0; box-shadow: none; font-weight: 600; z-index: 4; }
+
+  .city { font: 600 12px/1 var(--font-body); color: var(--city); white-space: nowrap; pointer-events: none;
+    text-shadow: 0 0 3px var(--city-halo), 0 0 3px var(--city-halo), 0 0 6px var(--city-halo); }
+  .city.t1 { font-size: 15px; font-weight: 700; }
+  .city.t2 { font-size: 13px; }
+  .z-low .city.t3, .z-low .city.t2 { display: none; }
+  .z-mid .city.t3 { display: none; }
+
+  .maplibregl-map { font: 12px/1.4 var(--font-body); }
+  .maplibregl-popup { z-index: 6; }
+  .maplibregl-popup-content { background: var(--panel); color: var(--ink); padding: 0; border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip, .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip, .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: var(--panel); }
+  .maplibregl-popup-anchor-top .maplibregl-popup-tip, .maplibregl-popup-anchor-top-left .maplibregl-popup-tip, .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: var(--panel); }
+  .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--panel); }
+  .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--panel); }
+  .maplibregl-popup-close-button { font-size: 18px; padding: 2px 8px; color: var(--muted); }
+  .maplibregl-ctrl-group { background: var(--panel); }
+  .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+  .maplibregl-ctrl-attrib { background: color-mix(in srgb, var(--panel) 80%, transparent) !important; color: var(--muted); }
+  .maplibregl-ctrl-attrib a { color: var(--muted); }
+  :root[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(.88); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(.88); } }
+
+  .pop { width: 270px; font-size: 13px; padding: 11px 13px 12px; display: flex; flex-direction: column; gap: 3px; }
+  .pop .pr { font: 700 19px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+  .pop .mt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pop .l { color: var(--muted); font-size: 12px; }
+  .pop .ft { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; font-size: 12px; color: var(--muted); }
+  .pop .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .pop a.go, .multi a.go { display: block; margin-top: 8px; text-align: center; background: var(--chip-on); color: var(--chip-on-ink); text-decoration: none; padding: 8px; border-radius: 8px; font-weight: 600; }
+  .multi { width: 300px; max-height: 340px; overflow-y: auto; }
+  .multi .h { padding: 10px 13px; font-weight: 700; border-bottom: 1px solid var(--line); }
+  .multi a.r { display: block; padding: 8px 13px; border-bottom: 1px solid var(--line); text-decoration: none; color: inherit; }
+  .multi a.r:hover { background: color-mix(in srgb, var(--panel) 92%, var(--ink)); }
+  .multi .pr { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .multi .s { font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    aside { position: absolute; right: 0; top: 0; bottom: 0; width: min(360px, 92vw); z-index: 5; box-shadow: var(--shadow); display: none; }
+    aside.open { display: flex; }
+    #listbtn { display: inline-block; }
+    .row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+    .row > * { flex: none; }
+    .group { flex-wrap: nowrap; }
+    #legend { display: none; }
+    #status { left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: 26px; max-width: none; }
+    .brand small { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+</head>
+<body>
+<header>
+  <div class="row">
+    <div class="brand"><h1><i></i>Nemovitosti od majitelů</h1><small id="stamp">celá ČR, bez realitek</small></div>
+    <div class="group" id="g-offer"></div>
+    <div class="sep"></div>
+    <div class="group" id="g-cat"><span>Typ</span></div>
+    <div class="sep"></div>
+    <div class="group" id="g-src"><span>Zdroj</span></div>
+    <button class="chip" id="listbtn" type="button">Seznam</button>
+  </div>
+  <div class="row">
+    <div class="group" id="g-disp"><span>Dispozice</span></div>
+    <div class="sep"></div>
+    <label class="f" for="age">Přidáno za posledních <select id="age"></select></label>
+    <label class="f" for="pmin">Cena <input type="text" id="pmin" placeholder="od (např. 2m)" inputmode="numeric"></label>
+    <label class="f" for="pmax">– <input type="text" id="pmax" placeholder="do" inputmode="numeric"></label>
+    <label class="f" for="amin">Plocha od <input type="text" id="amin" placeholder="m²" inputmode="numeric" style="width:64px"></label>
+    <label class="f" for="color">Barva teček
+      <select id="color"><option value="age">podle stáří</option><option value="ppm">podle ceny za m²</option><option value="src">podle zdroje</option></select>
+    </label>
+    <label class="f" for="region">Oblast <select id="region"></select></label>
+    <label class="chk" for="maybe" title="Inzeráty, u kterých si filtr není jistý, že nejsou od realitky (označené ⚠)"><input type="checkbox" id="maybe" checked> i nejisté ⚠</label>
+  </div>
+</header>
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div class="ov" id="base" role="group" aria-label="Podklad mapy">
+      <button type="button" data-b="osm">Barevná</button><button type="button" data-b="voyager">Světlá</button><button type="button" data-b="sat">Satelit</button><button type="button" data-b="kraje">Kraje</button>
+    </div>
+    <div class="ov" id="legend"></div>
+    <div class="ov" id="status">Načítám…</div>
+    <div class="ov" id="loading">Načítám inzeráty…</div>
+  </div>
+  <aside id="side">
+    <div class="side-h">
+      <div><b id="cnt">0</b> <span>ve výřezu mapy</span></div>
+      <select id="sort" aria-label="Řazení">
+        <option value="new">nejnovější</option><option value="cheap">nejlevnější</option><option value="ppm">nejlevnější za m²</option>
+      </select>
+    </div>
+    <div id="rows"></div>
+  </aside>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const nf = new Intl.NumberFormat("cs-CZ");
+const IS_TOUCH = matchMedia("(hover: none)").matches;
+const SRC_NAME = ["Sreality", "Bezrealitky", "Bazoš", "UlovDomov"];
+const SRC_COL = ["#d81b2c", "#00a54f", "#2962ff", "#8e24aa"];
+const CATS = [["byt", "Byty"], ["dum", "Domy"], ["pozemek", "Pozemky"], ["chata", "Chaty a chalupy"], ["komercni", "Komerční"], ["garaz", "Garáže"], ["ostatni", "Ostatní"]];
+const DISPS = [["1+kk"], ["1+1"], ["2+kk"], ["2+1"], ["3+kk"], ["3+1"], ["4+kk"], ["4+1"], ["5+", "5 a více"], ["atyp", "Atyp."], ["?", "Neuvedeno"]];
+const AGES = [[1, "1 hodinu"], [3, "3 hodiny"], [10, "10 hodin"], [24, "24 hodin"], [72, "3 dny"], [168, "7 dní"], [336, "14 dní"], [720, "30 dní"], [0, "kdykoliv"]];
+const AGE_COLS = [[1, "#ff1744", "do 1 hodiny"], [3, "#ff6d00", "do 3 hodin"], [10, "#ffc400", "do 10 hodin"], [24, "#aeea00", "do 24 hodin"],
+  [72, "#00c853", "do 3 dnů"], [168, "#00b8d4", "do týdne"], [720, "#2962ff", "do měsíce"], [Infinity, "#aa00ff", "starší"]];
+const PPM_SALE = [[40000, "#00c853"], [60000, "#64dd17"], [80000, "#ffd600"], [100000, "#ff9100"], [130000, "#ff3d00"], [Infinity, "#c51162"]];
+const PPM_RENT = [[150, "#00c853"], [200, "#64dd17"], [250, "#ffd600"], [300, "#ff9100"], [400, "#ff3d00"], [Infinity, "#c51162"]];
+const GREY = "#9aa3ad";
+const KRAJ_HUES = [4, 48, 140, 205, 280, 25, 170, 330, 95, 60, 190, 230, 120, 300];
+const REGIONS = [
+  ["Celá ČR", [12.09, 48.55, 18.86, 51.06]], ["Praha", [14.22, 49.94, 14.71, 50.18]], ["Brno a okolí", [16.38, 49.08, 16.84, 49.32]],
+  ["Ostrava", [18.1, 49.73, 18.4, 49.92]], ["Plzeň", [13.27, 49.68, 13.48, 49.8]], ["Olomouc", [17.18, 49.55, 17.33, 49.64]],
+  ["Liberec", [14.98, 50.72, 15.13, 50.81]], ["České Budějovice", [14.4, 48.93, 14.54, 49.02]], ["Hradec Králové", [15.76, 50.17, 15.9, 50.25]],
+  ["Pardubice", [15.7, 49.99, 15.85, 50.07]], ["Zlín", [17.6, 49.19, 17.73, 49.25]],
+  ["— Středočeský kraj", [13.4, 49.53, 15.53, 50.63]], ["— Jihočeský kraj", [13.5, 48.55, 15.6, 49.62]], ["— Plzeňský kraj", [12.4, 49.05, 13.95, 50.1]],
+  ["— Karlovarský kraj", [12.09, 49.9, 13.3, 50.47]], ["— Ústecký kraj", [12.95, 50.13, 14.85, 51.06]], ["— Liberecký kraj", [14.45, 50.48, 15.45, 51.03]],
+  ["— Královéhradecký kraj", [15.2, 49.95, 16.6, 50.8]], ["— Pardubický kraj", [15.35, 49.55, 16.85, 50.2]], ["— Vysočina", [14.85, 49.0, 16.45, 49.85]],
+  ["— Jihomoravský kraj", [15.55, 48.6, 17.65, 49.65]], ["— Olomoucký kraj", [16.65, 49.3, 17.7, 50.45]], ["— Zlínský kraj", [17.1, 48.85, 18.45, 49.5]],
+  ["— Moravskoslezský kraj", [17.15, 49.4, 18.9, 50.3]],
+];
+const CITIES = [
+  ["Praha", 50.0755, 14.4378, 1], ["Brno", 49.1951, 16.6068, 1], ["Ostrava", 49.8209, 18.2625, 1], ["Plzeň", 49.7384, 13.3736, 1],
+  ["Liberec", 50.7663, 15.0543, 2], ["Olomouc", 49.5938, 17.2509, 2], ["České Budějovice", 48.9747, 14.4743, 2], ["Hradec Králové", 50.2104, 15.8252, 2],
+  ["Ústí nad Labem", 50.6607, 14.0323, 2], ["Pardubice", 50.0343, 15.7812, 2], ["Zlín", 49.2265, 17.6707, 2], ["Jihlava", 49.3961, 15.5912, 2],
+  ["Karlovy Vary", 50.231, 12.8711, 2], ["Havířov", 49.7798, 18.4369, 3], ["Kladno", 50.1473, 14.1029, 3], ["Most", 50.503, 13.6362, 3],
+  ["Opava", 49.9387, 17.9026, 3], ["Frýdek-Místek", 49.6881, 18.3507, 3], ["Teplice", 50.6404, 13.8245, 3], ["Karviná", 49.854, 18.5417, 3],
+  ["Chomutov", 50.4605, 13.4178, 3], ["Děčín", 50.7822, 14.2148, 3], ["Mladá Boleslav", 50.4114, 14.9032, 3], ["Prostějov", 49.4719, 17.1118, 3],
+  ["Přerov", 49.4552, 17.4509, 3], ["Jablonec n. N.", 50.7243, 15.1711, 3], ["Česká Lípa", 50.6855, 14.5376, 3], ["Třebíč", 49.2149, 15.8817, 3],
+  ["Tábor", 49.4144, 14.6578, 3], ["Znojmo", 48.8555, 16.0488, 3], ["Příbram", 49.6899, 14.0104, 3], ["Cheb", 50.0796, 12.3739, 3],
+  ["Kolín", 50.0281, 15.2006, 3], ["Trutnov", 50.561, 15.9127, 3], ["Písek", 49.3088, 14.1475, 3], ["Kroměříž", 49.2979, 17.3931, 3],
+  ["Šumperk", 49.9653, 16.9706, 3], ["Vsetín", 49.3387, 17.9962, 3], ["Uherské Hradiště", 49.0698, 17.4597, 3], ["Břeclav", 48.759, 16.882, 3],
+  ["Hodonín", 48.8489, 17.1324, 3], ["Litoměřice", 50.5335, 14.1318, 3], ["Klatovy", 49.3955, 13.2951, 3], ["Strakonice", 49.2614, 13.9024, 3],
+  ["Havlíčkův Brod", 49.6078, 15.5807, 3], ["Náchod", 50.4167, 16.1629, 3], ["Nový Jičín", 49.5944, 18.0103, 3], ["Vyškov", 49.2775, 16.999, 3],
+  ["Blansko", 49.363, 16.644, 3], ["Beroun", 49.9638, 14.072, 3], ["Benešov", 49.7817, 14.6869, 3], ["Kutná Hora", 49.9484, 15.2682, 3],
+  ["Rakovník", 50.1037, 13.7334, 3], ["Jindřichův Hradec", 49.1441, 15.003, 3], ["Český Krumlov", 48.8127, 14.3175, 3], ["Domažlice", 49.4405, 12.9298, 3],
+  ["Sokolov", 50.1813, 12.6401, 3], ["Louny", 50.357, 13.7967, 3], ["Žďár n. S.", 49.5626, 15.9392, 3], ["Svitavy", 49.7559, 16.4683, 3],
+  ["Chrudim", 49.9511, 15.7956, 3], ["Jičín", 50.4373, 15.3517, 3], ["Pelhřimov", 49.4313, 15.2234, 3], ["Bruntál", 49.9884, 17.4647, 3],
+  ["Jeseník", 50.2294, 17.2046, 3], ["Mělník", 50.3505, 14.4741, 3], ["Nymburk", 50.1861, 15.0417, 3], ["Rychnov n. K.", 50.1629, 16.2749, 3],
+];
+
+// ───── filtry (pamatují se jen v tomto prohlížeči) ─────
+const F = { offer: new Set(["prodej"]), cat: new Set(), src: new Set(), disp: new Set(), age: 0, pmin: null, pmax: null, amin: null, color: "age", maybe: true, sort: "new", base: "osm" };
+const KEY = "mapa-majitelu-web-v1";
+try {
+  const s = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (s) { for (const k of ["offer", "cat", "src", "disp"]) if (Array.isArray(s[k])) F[k] = new Set(s[k]); for (const k of ["age", "pmin", "pmax", "amin", "color", "maybe", "sort", "base"]) if (k in s) F[k] = s[k]; }
+} catch (e) {}
+function persist() {
+  try { const o = { ...F }; for (const k of ["offer", "cat", "src", "disp"]) o[k] = [...F[k]]; localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function chipGroup(el, key, opts, withAll) {
+  const render = () => el.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset.v !== undefined ? F[key].has(c.dataset.v) : F[key].size === 0));
+  if (withAll) {
+    const a = document.createElement("button"); a.type = "button"; a.className = "chip all"; a.textContent = "vše";
+    a.onclick = () => { F[key].clear(); render(); changed(); }; el.appendChild(a);
+  }
+  for (const [v, label, col] of opts) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.v = v;
+    b.innerHTML = (col ? `<span class="dot" style="background:${col}"></span>` : "") + esc(label || v);
+    b.onclick = () => { F[key].has(v) ? F[key].delete(v) : F[key].add(v); render(); changed(); };
+    el.appendChild(b);
+  }
+  render();
+}
+chipGroup($("g-offer"), "offer", [["prodej", "Prodej"], ["pronajem", "Pronájem"]], false);
+chipGroup($("g-cat"), "cat", CATS, true);
+chipGroup($("g-src"), "src", SRC_NAME.map((n, i) => [String(i), n, SRC_COL[i]]), true);
+chipGroup($("g-disp"), "disp", DISPS, true);
+for (const [h, l] of AGES) $("age").add(new Option(l, h));
+REGIONS.forEach(([n], i) => $("region").add(new Option(n, i)));
+$("age").value = F.age; $("color").value = F.color; $("maybe").checked = F.maybe; $("sort").value = F.sort;
+const fmtIn = v => v == null ? "" : nf.format(v);
+$("pmin").value = fmtIn(F.pmin); $("pmax").value = fmtIn(F.pmax); $("amin").value = fmtIn(F.amin);
+function parseMoney(s) {
+  s = (s || "").toLowerCase().replace(/\s/g, "").replace(",", ".");
+  if (!s) return null;
+  const mul = /(m|mil)/.test(s) ? 1e6 : /(k|tis)/.test(s) ? 1e3 : 1;
+  const n = parseFloat(s.replace(/[^\d.]/g, ""));
+  return isFinite(n) ? Math.round(n * mul) : null;
+}
+$("age").onchange = e => { F.age = +e.target.value; changed(); };
+$("color").onchange = e => { F.color = e.target.value; changed(); };
+$("maybe").onchange = e => { F.maybe = e.target.checked; changed(); };
+$("sort").onchange = e => { F.sort = e.target.value; persist(); renderList(); };
+for (const id of ["pmin", "pmax", "amin"]) $(id).addEventListener("change", e => { F[id] = parseMoney(e.target.value); e.target.value = fmtIn(F[id]); changed(); });
+$("region").onchange = e => { const b = REGIONS[+e.target.value][1]; map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 20 }); };
+$("listbtn").onclick = () => $("side").classList.toggle("open");
+
+// ───── data ─────
+let D = null, items = [], AT = Date.now();
+const cityMarkers = [];
+function decode(d) {
+  const C = Object.fromEntries(d.cols.map((c, i) => [c, i]));
+  return d.rows.map((r, i) => ({
+    k: i, s: r[C.s], o: r[C.o] ? "pronajem" : "prodej", c: d.cats[r[C.c]], d: r[C.d] >= 0 ? d.disps[r[C.d]] : null,
+    p: r[C.p], a: r[C.a], l: r[C.l], m: r[C.m], la: r[C.la], lo: r[C.lo], ad: r[C.ad] != null ? r[C.ad] * 60000 : null,
+    pr: d.prec[r[C.pr]], maybe: !!r[C.maybe], ap: !!r[C.ap], t: r[C.t], loc: r[C.loc],
+    u: /^https:\/\//.test(r[C.u]) ? r[C.u] : d.prefix[d.src[r[C.s]]] + r[C.u], cur: r[C.cur],
+    img: C.img !== undefined && /^https:\/\//.test(r[C.img] || "") ? r[C.img] : null,
+  }));
+}
+function priceText(it) { return it.p ? nf.format(Math.round(it.p)) + " " + (it.cur || "Kč") + (it.o === "pronajem" ? "/měs." : "") : "Cena na dotaz"; }
+function sizeText(it) {
+  const p = [];
+  if (it.a) p.push(nf.format(it.a) + " m²");
+  if (it.l) p.push((it.a ? "pozemek " : "") + nf.format(it.l) + " m²");
+  return p.join(", ");
+}
+function ppmText(it) { return it.m ? nf.format(Math.round(it.m)) + " Kč/m²" + (it.o === "pronajem" ? "/měs." : "") : ""; }
+function dateText(ms, withTime) {
+  const d = new Date(ms);
+  return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}` + (withTime ? ` v ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : "");
+}
+function ageText(it) {
+  if (!it.ad) return "datum neznámé";
+  if (it.pr === "live") return "vloženo " + dateText(it.ad, true);
+  if (it.pr === "approx") {
+    const h = (AT - it.ad) / 36e5;
+    return "≈ vloženo " + dateText(it.ad, h < 48);
+  }
+  return "vloženo " + dateText(it.ad, false);
+}
+function colorOf(it) {
+  if (F.color === "src") return SRC_COL[it.s];
+  if (F.color === "ppm") {
+    if (!it.m) return GREY;
+    for (const [lim, c] of (it.o === "pronajem" ? PPM_RENT : PPM_SALE)) if (it.m < lim) return c;
+  }
+  if (!it.ad) return GREY;
+  const h = (AT - it.ad) / 36e5;
+  for (const [lim, c] of AGE_COLS) if (h <= lim) return c;
+  return GREY;
+}
+function pass(it) {
+  if (F.offer.size && !F.offer.has(it.o)) return false;
+  if (F.cat.size && !F.cat.has(it.c)) return false;
+  if (F.src.size && !F.src.has(String(it.s))) return false;
+  if (F.disp.size && !F.disp.has(it.d || "?")) return false;
+  if (!F.maybe && it.maybe) return false;
+  if (F.age && (!it.ad || AT - it.ad > F.age * 36e5)) return false;
+  if (F.pmin && !(it.p >= F.pmin)) return false;
+  if (F.pmax && !(it.p <= F.pmax)) return false;
+  if (F.amin && !((it.a || it.l) >= F.amin)) return false;
+  return true;
+}
+
+let filtered = [];
+function refresh() {
+  if (!D || !map.getSource("pts")) return;
+  filtered = items.filter(pass).sort((a, b) => (a.ad || 0) - (b.ad || 0));
+  map.getSource("pts").setData({ type: "FeatureCollection", features: filtered.map(it => ({
+    type: "Feature", id: it.k, geometry: { type: "Point", coordinates: [it.lo, it.la] }, properties: { k: it.k, c: colorOf(it) } })) });
+  $("age").classList.toggle("hot", F.age > 0 && F.age <= 10);
+  renderLegend(); renderList(); renderStatus();
+}
+let tm = null;
+function changed() { persist(); clearTimeout(tm); tm = setTimeout(refresh, 60); }
+
+// ───── mapa ─────
+function tok(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function krajFill() {
+  const s = tok("--kraj-s"), l = tok("--kraj-l");
+  const e = ["match", ["get", "i"]];
+  KRAJ_HUES.forEach((h, i) => e.push(i, `hsl(${h}, ${s}, ${l})`));
+  e.push(`hsl(0, 0%, ${l})`);
+  return e;
+}
+const map = new maplibregl.Map({
+  container: "map", center: [15.45, 49.8], zoom: 6.7, minZoom: 5.5, maxZoom: 17,
+  maxBounds: [[10.5, 47.6], [20.4, 51.9]], dragRotate: false, pitchWithRotate: false, attributionControl: { compact: true },
+  style: {
+    version: 8,
+    sources: {
+      osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 19,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' },
+      voyager: { type: "raster", tiles: ["a", "b", "c"].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png`),
+        tileSize: 256, maxzoom: 20, attribution: '© OpenStreetMap © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
+      sat: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256, maxzoom: 19, attribution: "Snímky © Esri" },
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": tok("--sea") } },
+      { id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": 0.25 } },
+      { id: "voyager", type: "raster", source: "voyager", layout: { visibility: "none" } },
+      { id: "sat", type: "raster", source: "sat", layout: { visibility: "none" } },
+    ],
+  },
+});
+function setBase(b) {
+  F.base = b;
+  for (const id of ["osm", "voyager", "sat"]) map.setLayoutProperty(id, "visibility", id === b ? "visible" : "none");
+  for (const id of ["kraje-fill", "kraje-line"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", b === "kraje" ? "visible" : "none");
+  $("map").classList.toggle("base-tiles", b !== "kraje");
+  document.querySelectorAll("#base button").forEach(x => x.classList.toggle("on", x.dataset.b === b));
+  persist();
+}
+document.querySelectorAll("#base button").forEach(x => x.onclick = () => setBase(x.dataset.b));
+map.touchZoomRotate.disableRotation();
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+new ResizeObserver(() => map.resize()).observe($("mapwrap"));
+
+function applyTheme() {
+  if (!map.getLayer("kraje-fill")) return;
+  map.setPaintProperty("bg", "background-color", tok("--sea"));
+  map.setPaintProperty("kraje-fill", "fill-color", krajFill());
+  map.setPaintProperty("kraje-line", "line-color", tok("--kraj-line"));
+  map.setPaintProperty("dots", "circle-stroke-color", ["case", HOVER, tok("--ink"), tok("--dot-line")]);
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+function zoomClass() {
+  const z = map.getZoom(), el = $("map");
+  el.classList.toggle("z-low", z < 7.2);
+  el.classList.toggle("z-mid", z >= 7.2 && z < 8.6);
+}
+map.on("zoom", zoomClass);
+
+const HOVER = ["boolean", ["feature-state", "hover"], false];
+map.on("load", async () => {
+  zoomClass();
+  for (const [name, la, lo, tier] of CITIES) {
+    const el = document.createElement("div"); el.className = `city t${tier}`; el.textContent = name;
+    cityMarkers.push(new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -2] }).setLngLat([lo, la]).addTo(map));
+  }
+  try {
+    const [kr, data] = await Promise.all([fetch("kraje.json").then(r => r.json()), fetch("data.json").then(r => r.json())]);
+    map.addSource("kraje", { type: "geojson", data: kr, attribution: "Hranice krajů © přispěvatelé OpenStreetMap" });
+    map.addLayer({ id: "kraje-fill", type: "fill", source: "kraje", paint: { "fill-color": krajFill() } });
+    map.addLayer({ id: "kraje-line", type: "line", source: "kraje", paint: { "line-color": tok("--kraj-line"), "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.2, 10, 2.5] } });
+    D = data; AT = data.at; items = decode(data);
+    $("stamp").textContent = `stav k ${dateText(AT, true)}`;
+    map.addSource("pts", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "halo", type: "circle", source: "pts", paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 3.6, 9, 6.3, 13, 9.5, 17, 13], "circle-color": "#000", "circle-opacity": 0.25, "circle-blur": 0.5 } });
+    map.addLayer({ id: "dots", type: "circle", source: "pts", paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, ["case", HOVER, 6, 2.6], 9, ["case", HOVER, 9, 4.6], 13, ["case", HOVER, 12, 7.5], 17, ["case", HOVER, 15, 10.5]],
+      "circle-color": ["get", "c"], "circle-stroke-color": ["case", HOVER, tok("--ink"), tok("--dot-line")],
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 5, 0.6, 9, 1.4, 13, 2.2] } });
+    $("loading").hidden = true;
+    setBase(F.base);
+    refresh();
+  } catch (e) {
+    $("loading").textContent = "Data se nepodařilo načíst. Zkus stránku obnovit.";
+  }
+});
+map.on("moveend", () => renderList());
+
+// ───── najetí a kliknutí ─────
+let hoverK = null, current = null, pinned = false;
+function setHover(k) {
+  if (hoverK !== null && map.getSource("pts")) map.setFeatureState({ source: "pts", id: hoverK }, { hover: false });
+  hoverK = k;
+  if (k !== null) map.setFeatureState({ source: "pts", id: k }, { hover: true });
+}
+function uniq(feats) {
+  const seen = new Set(), out = [];
+  for (const f of feats) { const k = f.properties.k; if (!seen.has(k)) { seen.add(k); out.push(items[k]); } }
+  return out.sort((a, b) => (b.ad || 0) - (a.ad || 0));
+}
+function popupHtml(list, withLink) {
+  if (list.length === 1) {
+    const it = list[0], meta = [sizeText(it), ppmText(it)].filter(Boolean).join(" · ");
+    return `<div class="pop">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="pr">${esc(priceText(it))}</div>${meta ? `<div class="mt">${esc(meta)}</div>` : ""}
+      <div>${esc(it.t)}</div><div class="l">${esc(it.loc)}${it.ap ? " (poloha přibližná)" : ""}</div>
+      <div class="ft"><span class="badge b-${it.s}">${SRC_NAME[it.s]}</span><span class="agebox" style="background:${colorOf(it)}"></span>${esc(ageText(it))}
+      ${it.maybe ? '<span class="warn">⚠ možná realitka</span>' : ""}</div>
+      ${withLink ? `<a class="go" href="${esc(it.u)}" target="_blank" rel="noopener">Otevřít inzerát na ${SRC_NAME[it.s]} ›</a>` : '<div class="hint">Kliknutím na tečku otevřeš inzerát</div>'}</div>`;
+  }
+  const rows = list.slice(0, 15).map(it => `<a class="r" href="${esc(it.u)}" target="_blank" rel="noopener">
+      <div class="pr">${esc(priceText(it))} <span class="badge b-${it.s}">${SRC_NAME[it.s]}</span></div>
+      <div class="s">${esc([it.d, sizeText(it), ppmText(it)].filter(Boolean).join(" · "))}</div>
+      <div class="s">${esc(ageText(it))}${it.maybe ? " · ⚠" : ""}</div></a>`).join("");
+  return `<div class="multi"><div class="h">${list.length} inzerátů na tomto místě</div>${rows}${list.length > 15 ? '<div class="more">… a další, přibliž mapu</div>' : ""}</div>`;
+}
+function closePopup() { if (current) { const c = current; current = null; c.remove(); } pinned = false; }
+function showPopup(list, pin) {
+  closePopup();
+  pinned = pin;
+  const it = list[0];
+  const p = new maplibregl.Popup({ closeButton: pin, closeOnClick: pin, offset: 12, maxWidth: "320px" })
+    .setLngLat([it.lo, it.la]).setHTML(popupHtml(list, pin)).addTo(map);
+  p.on("close", () => { if (current === p) { current = null; pinned = false; } });
+  current = p;
+}
+map.on("mousemove", "dots", e => {
+  if (IS_TOUCH) return;
+  map.getCanvas().style.cursor = "pointer";
+  const list = uniq(e.features);
+  if (list.length && list[0].k !== hoverK) { setHover(list[0].k); if (!pinned) showPopup(list, false); }
+});
+map.on("mouseleave", "dots", () => { map.getCanvas().style.cursor = ""; setHover(null); if (!pinned) closePopup(); });
+map.on("click", "dots", e => {
+  const list = uniq(map.queryRenderedFeatures(e.point, { layers: ["dots"] }));
+  if (!list.length) return;
+  if (list.length === 1 && !IS_TOUCH) { window.open(list[0].u, "_blank", "noopener"); return; }
+  showPopup(list, true);
+});
+
+// ───── seznam, legenda, stav ─────
+function renderList() {
+  if (!D) return;
+  const b = map.getBounds();
+  const vis = filtered.filter(it => b.contains([it.lo, it.la]));
+  if (F.sort === "new") vis.sort((a, b) => (b.ad || 0) - (a.ad || 0));
+  else if (F.sort === "cheap") vis.sort((a, b) => (a.p || Infinity) - (b.p || Infinity));
+  else vis.sort((a, b) => (a.m || Infinity) - (b.m || Infinity));
+  $("cnt").textContent = nf.format(vis.length);
+  $("listbtn").textContent = `Seznam (${nf.format(vis.length)})`;
+  const shown = vis.slice(0, 200);
+  $("rows").innerHTML = shown.map(it => `<a class="item${it.img ? " has-img" : ""}" href="${esc(it.u)}" target="_blank" rel="noopener" data-k="${it.k}">
+    ${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="b">
+    <div class="top"><span class="pr">${esc(priceText(it))}</span><span class="badge b-${it.s}">${SRC_NAME[it.s]}</span></div>
+    <div class="t">${esc(it.t)}</div>
+    <div class="s">${esc([sizeText(it), ppmText(it)].filter(Boolean).join(" · "))}</div>
+    <div class="s">${esc(it.loc)}</div>
+    <div class="a"><span class="agebox" style="background:${colorOf(it)}"></span>${esc(ageText(it))}${it.maybe ? ' <span class="warn">⚠ možná realitka</span>' : ""}</div></div></a>`).join("")
+    + (vis.length > shown.length ? '<div class="more">Zobrazeno prvních 200, přibliž mapu pro další.</div>' : "")
+    + (!vis.length ? '<div class="more">V tomto výřezu nic neodpovídá filtrům.<br>Zkus delší dobu „Přidáno za posledních“ nebo oddal mapu.</div>' : "");
+}
+$("rows").addEventListener("mouseover", e => { const a = e.target.closest(".item"); if (a) setHover(+a.dataset.k); });
+$("rows").addEventListener("mouseleave", () => setHover(null));
+function renderLegend() {
+  let h;
+  if (F.color === "age") h = '<div class="lt">Přidáno (od stažení dat)</div>' + AGE_COLS.map(([, c, l]) => `<div class="li"><i style="background:${c}"></i>${l}</div>`).join("");
+  else if (F.color === "src") h = '<div class="lt">Zdroj</div>' + SRC_NAME.map((n, i) => `<div class="li"><i style="background:${SRC_COL[i]}"></i>${n}</div>`).join("");
+  else {
+    const rent = F.offer.size === 1 && F.offer.has("pronajem"), sc = rent ? PPM_RENT : PPM_SALE;
+    let prev = 0;
+    h = `<div class="lt">Cena za m²${rent ? " (měsíčně)" : ""}</div>` + sc.map(([lim, c]) => {
+      const l = lim === Infinity ? `nad ${nf.format(prev)} Kč` : `${nf.format(prev)} – ${nf.format(lim)} Kč`; prev = lim;
+      return `<div class="li"><i style="background:${c}"></i>${l}</div>`;
+    }).join("") + `<div class="li"><i style="background:${GREY}"></i>neznámá</div>`;
+  }
+  $("legend").innerHTML = h;
+}
+function renderStatus() {
+  const by = [0, 0, 0, 0];
+  for (const it of items) by[it.s]++;
+  $("status").innerHTML = `Na mapě <b>${nf.format(filtered.length)}</b> z ${nf.format(items.length)} inzerátů od majitelů · `
+    + SRC_NAME.map((n, i) => `${n} ${nf.format(by[i])}`).join(" · ") + `<br>Stav k ${dateText(AT, true)}, odkazy vedou na původní inzeráty.`;
+}
+</script>
+</body>
+</html>
