@@ -149,6 +149,21 @@ def parse_area(text):
     return None
 
 
+# Hroby, hrobová a urnová místa nejsou nemovitosti k bydlení → vyřadit. Pozor na Turnov („t-urnov“),
+# město Hrob u Teplic („…, Hrob“, „v Hrobu“) a adresy „u hřbitova“, ty zůstávají.
+GRAVE = re.compile(
+    r"\bhrobov\w*|\bhrobk\w*|\bnahrob\w*|\b(dvoj|troj|ctyr)hrob\w*|\brodinn\w* hrob\w*|\burnov\w* (hrob|mist|haj)\w*"
+    r"|\bkolumbari\w*|\bhrob\w* (pro|na|s|se|urnov)\b|^\W*hrob(y|u)?\b"
+    r"|\b(prodam|prodej|prenecham|prenechani|prenechat|nabizim|daruji|nabizime)\w* (\w+ )?hrob(y|u|ek)?\b"
+)
+
+
+def is_grave(title, cat=None):
+    t = norm(title)
+    # V kategorii „ostatní“ (Bazoš) stačí samotné slovo hrob – města ani adresy tam nebývají
+    return bool(GRAVE.search(t) or (cat == "ostatni" and re.search(r"\bhrob\w*|\burnov\w*", t)))
+
+
 _host_next, _host_lock = {}, threading.Lock()
 
 
@@ -425,6 +440,8 @@ def sr_build(r):
         cat = "chata"
     elif m == 5 and sub in (34, 52):
         cat = "garaz"
+    if is_grave(name, cat):
+        return None
     area = areas[0] if areas else None
     land = areas[1] if len(areas) > 1 else None
     if cat == "pozemek":
@@ -788,7 +805,7 @@ def bz_ingest(rows, sec, cat, live, first=None):
     for r in rows:
         if r["date"] and not r["top"]:
             by_date[r["date"]] = max(by_date.get(r["date"], 0), r["id"])
-        if BZ_WANTED.search(norm(r["title"])):
+        if BZ_WANTED.search(norm(r["title"])) or is_grave(r["title"], BZ_CAT[cat]):
             continue
         key = f"bz:{r['id']}"
         text = f"{r['title']} {r['desc']}"
@@ -1024,6 +1041,8 @@ def br_ingest(rows, offer, estate, live, first=None):
         price = a.get("price") or None
         size = surf or land
         title = br_field(a, "imageAltText") or ""
+        if is_grave(title, c):
+            continue
         disp = BR_DISP.get(a.get("disposition") or "")
         if not disp and (a.get("disposition") or "").startswith("DISP_"):
             disp = "5+"
@@ -1194,6 +1213,8 @@ def ud_ingest(offers, otype):
         pr = o.get("rentalPrice") or {}
         price = pr.get("value") or None
         title = o.get("title") or ""
+        if is_grave(title, c):
+            continue
         kw = bz_flags(title, o.get("description") or "", "")
         photos = o.get("photos") or []
         own = ud_own(store.ud_owner.get(str(oid)), kw)
@@ -1400,6 +1421,9 @@ def prepare():
             if k not in br_cats:
                 store.meta["br_totals"].pop(k)
         for k, it in list(store.items.items()):
+            if is_grave(it.get("t") or "", it.get("c")):
+                store.remove(k)
+                continue
             if it.get("s") == "bezrealitky" and it.get("_cat") not in br_cats:
                 store.remove(k)
             if it.get("s") != "bazos" or not recheck:
