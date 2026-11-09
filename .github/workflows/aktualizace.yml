@@ -1,9 +1,12 @@
 # Každou hodinu stáhne nové inzeráty a zveřejní mapu na GitHub Pages.
+# Jednou týdně navíc obnoví 60denní lhůtu, po které by GitHub
+# automatické spouštění ve veřejném repozitáři sám vypnul.
 name: Aktualizace mapy
 
 on:
   schedule:
     - cron: "17 * * * *"
+    - cron: "43 4 * * 1"   # pondělí 4:43 UTC: pojistka proti vypnutí
   workflow_dispatch:
 
 permissions:
@@ -11,14 +14,14 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: aktualizace
-  cancel-in-progress: false
-
 jobs:
   aktualizace:
+    if: github.event.schedule != '43 4 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    concurrency:
+      group: aktualizace
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -56,3 +59,18 @@ jobs:
 
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  # Znovu potvrdí zapnutí tohoto workflow. Tím se vynuluje počítadlo
+  # nečinnosti, takže hodinové aktualizace nepřestanou běžet ani po
+  # 60 dnech bez změn v repozitáři.
+  pojistka:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '43 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Udržet automatické spouštění zapnuté
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/aktualizace.yml/enable"
