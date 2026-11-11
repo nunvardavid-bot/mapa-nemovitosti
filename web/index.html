@@ -151,6 +151,33 @@
   .multi .pr { font-weight: 700; font-variant-numeric: tabular-nums; }
   .multi .s { font-size: 12px; color: var(--muted); }
 
+  /* Tabulka: překryje mapu i seznam, filtry nahoře dál platí */
+  #tblbtn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  #tblbtn svg { width: 14px; height: 14px; }
+  #tbl { position: absolute; inset: 0; z-index: 7; background: var(--panel); display: flex; flex-direction: column; }
+  .tbl-h { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-block: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .tbl-h .n b { font: 700 17px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .tbl-h .n span { color: var(--muted); }
+  .tbl-h .note { color: var(--muted); font-size: 12px; }
+  #tclose { margin-left: auto; }
+  .tbl-w { flex: 1; min-height: 0; overflow: auto; }
+  #tbl table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 900px; font-size: 13px; }
+  #tbl th { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line); padding: 0; text-align: left; white-space: nowrap; }
+  #tbl th button { border: 0; background: none; width: 100%; padding: 9px 10px; text-align: inherit; cursor: pointer;
+    color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+  #tbl th button:hover, #tbl th[aria-sort] button { color: var(--ink); }
+  #tbl th.num { text-align: right; }
+  #tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #tbl td:first-child, #tbl th:first-child button { padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  #tbl td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #tbl td.t { min-width: 250px; max-width: 420px; }
+  #tbl td.t a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  #tbl td.t a:hover { color: var(--accent); text-decoration: underline; }
+  #tbl td .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  #tbl tbody tr:hover { background: color-mix(in srgb, var(--panel) 94%, var(--ink)); }
+  #tmore { display: block; margin: 14px auto 20px; }
+
   @media (max-width: 900px) {
     aside { position: absolute; right: 0; top: 0; bottom: 0; width: min(360px, 92vw); z-index: 5; box-shadow: var(--shadow); display: none; }
     aside.open { display: flex; }
@@ -170,6 +197,8 @@
 <header>
   <div class="row">
     <div class="brand"><h1><i></i>Nemovitosti od majitelů</h1><small id="stamp">celá ČR, bez realitek</small></div>
+    <button class="chip" id="tblbtn" type="button" aria-pressed="false" aria-controls="tbl">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6.5h13M1.5 10h13M6 6.5v7"/></svg>Tabulka</button>
     <div class="group" id="g-offer"></div>
     <div class="sep"></div>
     <div class="group" id="g-cat"><span>Typ</span></div>
@@ -210,6 +239,22 @@
     </div>
     <div id="rows"></div>
   </aside>
+  <section id="tbl" hidden aria-label="Tabulka inzerátů">
+    <div class="tbl-h">
+      <div class="n"><b id="tcnt">0</b> <span>inzerátů podle filtrů</span></div>
+      <div class="group" id="tscope"><button type="button" class="chip" data-v="view">Ve výřezu mapy</button><button type="button" class="chip" data-v="all">Celá ČR</button></div>
+      <span class="note">Telefon a jméno prodávajícího najdeš po otevření inzerátu (klikni na název).</span>
+      <button type="button" class="chip" id="tclose">Zpět na mapu ✕</button>
+    </div>
+    <div class="tbl-w">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="more" id="tempty" hidden>Filtrům nic neodpovídá. Zkus delší dobu „Přidáno za posledních“ nebo „Celá ČR“.</div>
+      <button type="button" class="chip" id="tmore" hidden></button>
+    </div>
+  </section>
 </main>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -261,11 +306,12 @@ const CITIES = [
 ];
 
 // ───── filtry (pamatují se jen v tomto prohlížeči) ─────
-const F = { offer: new Set(["prodej"]), cat: new Set(), src: new Set(), disp: new Set(), age: 0, pmin: null, pmax: null, amin: null, color: "age", maybe: true, sort: "new", base: "osm" };
+const F = { offer: new Set(["prodej"]), cat: new Set(), src: new Set(), disp: new Set(), age: 0, pmin: null, pmax: null, amin: null, color: "age", maybe: true, sort: "new", base: "osm",
+  tscope: "view", tkey: "ad", tdir: -1 };
 const KEY = "mapa-majitelu-web-v1";
 try {
   const s = JSON.parse(localStorage.getItem(KEY) || "null");
-  if (s) { for (const k of ["offer", "cat", "src", "disp"]) if (Array.isArray(s[k])) F[k] = new Set(s[k]); for (const k of ["age", "pmin", "pmax", "amin", "color", "maybe", "sort", "base"]) if (k in s) F[k] = s[k]; }
+  if (s) { for (const k of ["offer", "cat", "src", "disp"]) if (Array.isArray(s[k])) F[k] = new Set(s[k]); for (const k of ["age", "pmin", "pmax", "amin", "color", "maybe", "sort", "base", "tscope", "tkey", "tdir"]) if (k in s) F[k] = s[k]; }
 } catch (e) {}
 function persist() {
   try { const o = { ...F }; for (const k of ["offer", "cat", "src", "disp"]) o[k] = [...F[k]]; localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
@@ -350,6 +396,9 @@ function colorOf(it) {
     if (!it.m) return GREY;
     for (const [lim, c] of (it.o === "pronajem" ? PPM_RENT : PPM_SALE)) if (it.m < lim) return c;
   }
+  return ageColor(it);
+}
+function ageColor(it) {
   if (!it.ad) return GREY;
   const h = (AT - it.ad) / 36e5;
   for (const [lim, c] of AGE_COLS) if (h <= lim) return c;
@@ -375,7 +424,8 @@ function refresh() {
   map.getSource("pts").setData({ type: "FeatureCollection", features: filtered.map(it => ({
     type: "Feature", id: it.k, geometry: { type: "Point", coordinates: [it.lo, it.la] }, properties: { k: it.k, c: colorOf(it) } })) });
   $("age").classList.toggle("hot", F.age > 0 && F.age <= 10);
-  renderLegend(); renderList(); renderStatus();
+  T.limit = T_PAGE;
+  renderLegend(); renderList(); renderStatus(); renderTable();
 }
 let tm = null;
 function changed() { persist(); clearTimeout(tm); tm = setTimeout(refresh, 60); }
@@ -469,7 +519,7 @@ map.on("load", async () => {
     $("loading").textContent = "Data se nepodařilo načíst. Zkus stránku obnovit.";
   }
 });
-map.on("moveend", () => renderList());
+map.on("moveend", () => { renderList(); if (F.tscope === "view") { T.limit = T_PAGE; renderTable(); } });
 
 // ───── najetí a kliknutí ─────
 let hoverK = null, current = null, pinned = false;
@@ -565,6 +615,79 @@ function renderStatus() {
   $("status").innerHTML = `Na mapě <b>${nf.format(filtered.length)}</b> z ${nf.format(items.length)} inzerátů od majitelů · `
     + SRC_NAME.map((n, i) => `${n} ${nf.format(by[i])}`).join(" · ") + `<br>Stav k ${dateText(AT, true)}, odkazy vedou na původní inzeráty.`;
 }
+
+// ───── tabulka ─────
+const T_PAGE = 300;
+const T = { open: false, limit: T_PAGE };
+const CAT_ONE = { byt: "Byt", dum: "Dům", pozemek: "Pozemek", chata: "Chata / chalupa", komercni: "Komerční prostor", garaz: "Garáž", ostatni: "Ostatní" };
+const TCOLS = [["t", "Inzerát"], ["loc", "Kde"], ["c", "Typ"], ["p", "Cena", 1], ["a", "Velikost", 1], ["m", "Kč/m²", 1], ["ad", "Přidáno", 1]];
+const coll = new Intl.Collator("cs");
+function typeText(it) { return [CAT_ONE[it.c] || it.c, it.d && it.d !== "?" ? it.d : ""].filter(Boolean).join(" "); }
+function locText(it) { return (it.loc || "").replace(/^[\s,–-]+/, ""); }
+const SORTV = { t: it => it.t || null, loc: it => locText(it) || null, c: it => typeText(it), p: it => it.p || null,
+  a: it => it.a || it.l || null, m: it => it.m || null, ad: it => it.ad || null };
+function addedShort(it) {
+  if (!it.ad) return "neznámo";
+  const h = (AT - it.ad) / 36e5, pre = it.pr === "approx" ? "≈ " : "";
+  if (it.pr === "live" || it.pr === "approx") {
+    if (h < 1) return pre + "před " + Math.max(1, Math.round(h * 60)) + " min";
+    if (h < 24) return pre + "před " + Math.round(h) + " h";
+  }
+  return pre + dateText(it.ad, false);
+}
+function tableRows() {
+  let rows = filtered;
+  if (F.tscope === "view") { const b = map.getBounds(); rows = rows.filter(it => b.contains([it.lo, it.la])); }
+  const get = SORTV[F.tkey] || SORTV.ad, dir = F.tdir, str = F.tkey === "t" || F.tkey === "loc" || F.tkey === "c";
+  return rows.map(it => [get(it), it]).sort((x, y) => {
+    if (x[0] == null) return y[0] == null ? 0 : 1;   // bez hodnoty vždy na konec
+    if (y[0] == null) return -1;
+    return dir * (str ? coll.compare(x[0], y[0]) : x[0] - y[0]);
+  }).map(x => x[1]);
+}
+function renderTable() {
+  if (!T.open || !D) return;
+  const rows = tableRows(), shown = rows.slice(0, T.limit);
+  $("tcnt").textContent = nf.format(rows.length);
+  document.querySelectorAll("#tscope .chip").forEach(c => c.classList.toggle("on", c.dataset.v === F.tscope));
+  $("thead").innerHTML = "<tr>" + TCOLS.map(([k, l, num]) => {
+    const on = F.tkey === k;
+    return `<th class="${num ? "num" : ""}"${on ? ` aria-sort="${F.tdir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-k="${k}">${l}${on ? (F.tdir > 0 ? " ↑" : " ↓") : ""}</button></th>`;
+  }).join("") + "</tr>";
+  $("tbody").innerHTML = shown.map(it => `<tr>
+    <td class="t"><a href="${esc(it.u)}" target="_blank" rel="noopener">${esc(it.t || "Inzerát na " + SRC_NAME[it.s])}</a>
+      <div class="sub"><span class="badge b-${it.s}">${SRC_NAME[it.s]}</span>${it.maybe ? ' <span class="warn">⚠ možná realitka</span>' : ""}</div></td>
+    <td>${esc(locText(it) || "neuvedeno")}${it.ap ? '<div class="sub">poloha přibližná</div>' : ""}</td>
+    <td>${esc(typeText(it))}<div class="sub">${it.o === "pronajem" ? "pronájem" : "prodej"}</div></td>
+    <td class="num"><b>${esc(priceText(it))}</b></td>
+    <td class="num">${esc(sizeText(it) || "neuvedeno")}</td>
+    <td class="num">${it.m ? nf.format(Math.round(it.m)) + (it.o === "pronajem" ? '<div class="sub">měsíčně</div>' : "") : "–"}</td>
+    <td class="num"><span class="agebox" style="background:${ageColor(it)}"></span> ${esc(addedShort(it))}</td></tr>`).join("");
+  $("tempty").hidden = rows.length > 0;
+  $("tmore").hidden = rows.length <= shown.length;
+  $("tmore").textContent = `Zobrazit dalších ${nf.format(Math.min(T_PAGE, rows.length - shown.length))} (zatím ${nf.format(shown.length)} z ${nf.format(rows.length)})`;
+}
+function setTable(open) {
+  T.open = open; T.limit = T_PAGE;
+  $("tbl").hidden = !open;
+  $("tblbtn").classList.toggle("on", open);
+  $("tblbtn").setAttribute("aria-pressed", String(open));
+  if (open) { closePopup(); $("side").classList.remove("open"); renderTable(); $("tbl").querySelector(".tbl-w").scrollTop = 0; }
+}
+$("tblbtn").onclick = () => setTable(!T.open);
+$("tclose").onclick = () => setTable(false);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && T.open) setTable(false); });
+$("tscope").onclick = e => {
+  const c = e.target.closest(".chip"); if (!c) return;
+  F.tscope = c.dataset.v; persist(); T.limit = T_PAGE; renderTable();
+};
+$("thead").onclick = e => {
+  const b = e.target.closest("button[data-k]"); if (!b) return;
+  const k = b.dataset.k;
+  if (F.tkey === k) F.tdir = -F.tdir; else { F.tkey = k; F.tdir = k === "ad" ? -1 : 1; }
+  persist(); T.limit = T_PAGE; renderTable();
+};
+$("tmore").onclick = () => { T.limit += T_PAGE; renderTable(); };
 </script>
 </body>
 </html>
